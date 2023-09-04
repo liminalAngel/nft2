@@ -10,7 +10,7 @@ export async function run(provider: NetworkProvider) {
         commonContent: "",
         nftItemCode: await compile('SbtItem'),
         royaltyParams: {
-            royaltyFactor: 12,
+            royaltyFactor: 5,
             royaltyBase: 100,
             royaltyAddress: provider.sender().address as Address,
         }
