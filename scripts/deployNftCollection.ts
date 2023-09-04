@@ -6,7 +6,7 @@ export async function run(provider: NetworkProvider) {
     const nftCollection = provider.open(NftCollection.createFromConfig({
         ownerAddress: provider.sender().address as Address,
         nextItemIndex: 0,
-        collectionContent: 'tonstorage://29FA5116613260DEAD3A4C01E87D26D33762F4A04EF9F4BB43181F2081DEE62C',
+        collectionContent: 'https://raw.githubusercontent.com/liminalAngel/nft2/main/scripts/collection.json',
         commonContent: "",
         nftItemCode: await compile('SbtItem'),
         royaltyParams: {
