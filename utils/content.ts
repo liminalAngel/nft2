@@ -1,79 +1,226 @@
-import { beginCell, Cell } from 'ton-core'
+import { beginCell, Builder, Slice, Dictionary } from 'ton-core';
+import { sha256_sync } from 'ton-crypto';
 
-const OFF_CHAIN_CONTENT_PREFIX = 0x01
+// offchain#01 uri:Text = FullContent
 
-export function flattenSnakeCell(cell: Cell) {
-  let c: Cell | null = cell
+type OnchainContent = {
+    type: 'onchain';
+    knownKeys: Map<string, string>;
+    unknownKeys: Map<bigint, string>;
+};
 
-  let res = Buffer.alloc(0)
+export type OffchainContent = {
+    type: 'offchain';
+    uri: string;
+};
 
-  while (c) {
-    const cs = c.beginParse()
-    if (cs.remainingBits === 0) {
-      return res
+type FullContent = OnchainContent | OffchainContent;
+
+const propertyNames = ['uri', 'name', 'description', 'image', 'image_data'];
+
+// onchain#00 data:(HashMapE 256 ^ContentData) = FullContent;
+// offchain#01 uri:Text = FullContent;
+// preloads a uint8 then calls either the onchain or the offchain variant
+export function loadFullContent(slice: Slice): FullContent {
+    const data = slice.preloadUint(8);
+
+    switch (data) {
+        case 0x00:
+            return loadOnchainContent(slice);
+        case 0x01:
+            return loadOffchainContent(slice);
+        default:
+            throw new Error(`Unknown content type: ${data.toString(16)}`);
     }
-    if (cs.remainingBits % 8 !== 0) {
-      throw Error('Number remaining of bits is not multiply of 8')
+}
+
+export function storeFullContent(src: FullContent): (builder: Builder) => void {
+    switch (src.type) {
+        case 'onchain':
+            return storeOnchainContent(src);
+        case 'offchain':
+            return storeOffchainContent(src);
+        default:
+            throw new Error('Unknown content type');
+    }
+}
+
+// onchain#00 data:(HashMapE 256 ^ContentData) = FullContent;
+// loads a uint8, checks that it is 0x00, calls loadOnchainDict, inserts known keys into the respective fields
+export function loadOnchainContent(slice: Slice): OnchainContent {
+    const data = slice.loadUint(8);
+
+    if (data !== 0x00) {
+        throw new Error(`Unknown content type: ${data.toString(16)}`);
     }
 
-    const data = cs.loadBuffer(cs.remainingBits / 8)
-    res = Buffer.concat([res, data])
-    c = c.refs && c.refs[0]
-  }
+    const onchainDict = loadOnchainDict(slice);
+    const knownKeys = new Map<string, string>();
+    for (const knownProperty of propertyNames) {
+        const hashedKey = BigInt('0x' + sha256_sync(knownProperty).toString('hex'));
+        const value = onchainDict.get(hashedKey);
 
-  return res
-}
-
-function bufferToChunks(buff: Buffer, chunkSize: number) {
-  const chunks: Buffer[] = []
-  while (buff.byteLength > 0) {
-    chunks.push(buff.slice(0, chunkSize))
-    buff = buff.slice(chunkSize)
-  }
-  return chunks
-}
-
-export function makeSnakeCell(data: Buffer): Cell {
-  const chunks = bufferToChunks(data, 127)
-
-  if (chunks.length === 0) {
-    return beginCell().endCell()
-  }
-
-  if (chunks.length === 1) {
-    return beginCell().storeBuffer(chunks[0]).endCell()
-  }
-
-  let curCell = beginCell()
-
-  for (let i = chunks.length - 1; i >= 0; i--) {
-    const chunk = chunks[i]
-
-    curCell.storeBuffer(chunk)
-
-    if (i - 1 >= 0) {
-      const nextCell = beginCell()
-      nextCell.storeRef(curCell)
-      curCell = nextCell
+        if (onchainDict.has(hashedKey) && value !== undefined) {
+            knownKeys.set(knownProperty, value);
+        }
     }
-  }
 
-  return curCell.endCell()
+    return {
+        type: 'onchain',
+        knownKeys,
+        unknownKeys: onchainDict,
+    };
 }
 
-export function encodeOffChainContent(content: string) {
-  let data = Buffer.from(content)
-  const offChainPrefix = Buffer.from([OFF_CHAIN_CONTENT_PREFIX])
-  data = Buffer.concat([offChainPrefix, data])
-  return makeSnakeCell(data)
+export function storeOnchainContent(src: OnchainContent): (builder: Builder) => void {
+    const map = new Map<bigint, string>();
+
+    for (const [key, value] of src.unknownKeys) map.set(key, value);
+
+    for (const [key] of src.knownKeys) {
+        const hashedKey = BigInt('0x' + sha256_sync(key).toString('hex'));
+        map.set(hashedKey, key);
+    }
+
+    return (builder: Builder) => {
+        builder.storeUint(8, 0x00);
+        builder.store(storeOnchainDict(map));
+    };
 }
 
-export function decodeOffChainContent(content: Cell) {
-  const data = flattenSnakeCell(content)
+// offchain#01 uri:Text = FullContent;
+// loads a uint8, checks that it is 0x01, calls loadSnakeData
+export function loadOffchainContent(slice: Slice): OffchainContent {
+    const prefix = slice.loadUint(8);
 
-  const prefix = data[0]
-  if (prefix !== OFF_CHAIN_CONTENT_PREFIX) {
-    throw new Error(`Unknown content prefix: ${prefix.toString(16)}`)
-  }
-  return data.slice(1).toString()
+    if (prefix !== 0x01) {
+        throw new Error(`Unknown content prefix: ${prefix.toString(16)}`);
+    }
+
+    return {
+        type: 'offchain',
+        uri: slice.loadStringTail(),
+    };
+}
+
+export function storeOffchainContent(src: OffchainContent): (builder: Builder) => void {
+    return (builder: Builder) => {
+        builder.storeUint(0x01, 8).storeStringTail(src.uri);
+    };
+}
+
+// snake#00 data:(SnakeData ~n) = ContentData;
+// chunks#01 data:ChunkedData = ContentData;
+// preloads a uint8 then calls either loadSnakeData or loadChunkedData
+export function loadContentData(slice: Slice): string {
+    const data = slice.preloadUint(8);
+
+    switch (data) {
+        case 0x00:
+            return loadSnakeData(slice);
+        case 0x01:
+            return loadChunkedData(slice);
+        default:
+            throw new Error(`Unknown content type: ${data.toString(16)}`);
+    }
+}
+// notice that there is no storeContentData
+
+// snake#00 data:(SnakeData ~n) = ContentData;
+// loads a uint8, checks that it is 0x00, calls slice.loadStringTail
+export function loadSnakeData(slice: Slice): string {
+    const prefix = slice.loadUint(8);
+
+    if (prefix !== 0x00) {
+        throw new Error(`Unknown content prefix: ${prefix.toString(16)}`);
+    }
+
+    return slice.loadStringTail();
+}
+
+export function storeSnakeData(src: string): (builder: Builder) => void {
+    return (builder: Builder) => {
+        builder.storeUint(0x00, 8).storeStringTail(src);
+    };
+}
+
+// chunks#01 data:ChunkedData = ContentData;
+// chunked_data#_ data:(HashMapE 32 ^(SnakeData ~0)) = ChunkedData;
+// notice that above it is `SnakeData ~0` which means `the last layer` so there must be no refs in it, and it should be an integer number of bytes
+// loads a uint8, checks that it is 0x01, calls loadChunkedRaw
+export function loadChunkedData(slice: Slice): string {
+    const prefix = slice.loadUint(8);
+
+    if (prefix !== 0x01) {
+        throw new Error(`Unknown content prefix: ${prefix.toString(16)}`);
+    }
+
+    return loadChunkedRaw(slice);
+}
+
+export function storeChunkedData(src: string): (builder: Builder) => void {
+    return (builder: Builder) => {
+        builder.storeUint(0x01, 8).store(storeChunkedRaw(src));
+    };
+}
+
+// these two only work with the dict (HashMapE 32 ^(SnakeData ~0))
+// load must iterate over all parts and combine them, store must split the string as needed
+export function loadChunkedRaw(slice: Slice): string {
+    const dict = slice.loadDict(Dictionary.Keys.Uint(32), Dictionary.Values.Cell());
+
+    let data = '';
+
+    for (let i = 0; i < dict.size; i++) {
+        const value = dict.get(i);
+
+        if (!value) {
+            throw new Error(`Missing value for key: ${i.toString(16)}`);
+        }
+
+        data += value.beginParse().loadStringRefTail();
+    }
+
+    return data;
+}
+
+export function storeChunkedRaw(src: string): (builder: Builder) => void {
+    const dict = Dictionary.empty(Dictionary.Keys.Uint(32), Dictionary.Values.Cell());
+
+    const nChunks = Math.ceil(src.length / 127);
+
+    for (let i = 0; i < nChunks; i++) {
+        const chunk = src.slice(i * 127, (i + 1) * 127);
+        dict.set(i, beginCell().storeStringRefTail(chunk).endCell());
+    }
+
+    return (builder: Builder) => {
+        builder.storeDict(dict);
+    };
+}
+
+// uses the Dictionary primitive with loadContentData to parse the dict
+export function loadOnchainDict(slice: Slice): Map<bigint, string> {
+    const dict = slice.loadDict(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
+
+    const data = new Map<bigint, string>();
+
+    for (const [key, value] of dict) {
+        data.set(key, loadContentData(value.beginParse()));
+    }
+
+    return data;
+}
+
+// uses the Dictionary primitive and either storeSnakeData or storeChunkedData (probably just choose the former one for now)
+export function storeOnchainDict(src: Map<bigint, string>): (builder: Builder) => void {
+    const dict = Dictionary.empty(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
+
+    for (const [key, value] of src) {
+        dict.set(key, beginCell().store(storeSnakeData(value)).endCell());
+    }
+
+    return (builder: Builder) => {
+        builder.storeDict(dict);
+    };
 }

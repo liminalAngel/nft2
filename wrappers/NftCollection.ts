@@ -1,5 +1,16 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Dictionary, Sender, SendMode, toNano } from 'ton-core';
-import { encodeOffChainContent } from '../utils/content';
+import {
+    Address,
+    beginCell,
+    Cell,
+    Contract,
+    contractAddress,
+    ContractProvider,
+    Dictionary,
+    Sender,
+    SendMode,
+    toNano,
+} from 'ton-core';
+import { loadFullContent, storeOffchainContent, OffchainContent } from '../utils/content';
 import { CollectionMint, MintValue } from '../utils/collectionHelpers';
 
 export type RoyaltyParams = {
@@ -17,31 +28,26 @@ export type NftCollectionConfig = {
     royaltyParams: RoyaltyParams;
 };
 
-export function buildNftCollectionContentCell(commonContent: string, collectionContent: string): Cell {
+export async function buildNftCollectionContentCell(commonContent: string, collectionContent: string): Promise<Cell> {
+    let contentData: OffchainContent = {
+        type: 'offchain',
+        uri: collectionContent,
+    };
     let contentCell = beginCell();
-
-    let encodedCollectionContent = encodeOffChainContent(collectionContent);
-
     let commonContentCell = beginCell();
-    commonContentCell.storeStringTail(commonContent);
+    commonContentCell.storeBuffer(Buffer.from(commonContent));
 
-    contentCell.storeRef(encodedCollectionContent);
-    contentCell.storeRef(commonContentCell);
+    contentCell.store(storeOffchainContent(contentData));
+    contentCell.storeRef(commonContentCell.asCell());
 
     return contentCell.endCell();
 }
 
-
-export function nftCollectionConfigToCell(config: NftCollectionConfig): Cell {
+export async function nftCollectionConfigToCell(config: NftCollectionConfig): Promise<Cell> {
     return beginCell()
         .storeAddress(config.ownerAddress)
         .storeUint(config.nextItemIndex, 64)
-        .storeRef(
-            buildNftCollectionContentCell(
-                config.collectionContent,
-                config.commonContent
-            )
-        )
+        .storeRef(await buildNftCollectionContentCell(config.collectionContent, config.commonContent))
         .storeRef(config.nftItemCode)
         .storeRef(
             beginCell()
@@ -49,7 +55,7 @@ export function nftCollectionConfigToCell(config: NftCollectionConfig): Cell {
                 .storeUint(config.royaltyParams.royaltyBase, 16)
                 .storeAddress(config.royaltyParams.royaltyAddress)
         )
-    .endCell();
+        .endCell();
 }
 
 export class NftCollection implements Contract {
@@ -59,8 +65,8 @@ export class NftCollection implements Contract {
         return new NftCollection(address);
     }
 
-    static createFromConfig(config: NftCollectionConfig, code: Cell, workchain = 0) {
-        const data = nftCollectionConfigToCell(config);
+    static async createFromConfig(config: NftCollectionConfig, code: Cell, workchain = 0) {
+        const data = await nftCollectionConfigToCell(config);
         const init = { code, data };
         return new NftCollection(contractAddress(workchain, init), init);
     }
@@ -73,7 +79,9 @@ export class NftCollection implements Contract {
         });
     }
 
-    async sendMint(provider: ContractProvider, via: Sender, 
+    async sendMint(
+        provider: ContractProvider,
+        via: Sender,
         opts: {
             itemIndex: number;
             itemOwnerAddress: Address;
@@ -82,7 +90,6 @@ export class NftCollection implements Contract {
             amount: bigint;
         }
     ) {
-
         const nftContent = beginCell();
         nftContent.storeBuffer(Buffer.from(opts.itemContent));
 
@@ -101,42 +108,46 @@ export class NftCollection implements Contract {
                 .storeUint(opts.itemIndex, 64)
                 .storeCoins(opts.amount)
                 .storeRef(nftMessage)
-            .endCell(),
+                .endCell(),
         });
     }
 
-    async sendBatchMint(provider: ContractProvider, via: Sender,
+    async sendBatchMint(
+        provider: ContractProvider,
+        via: Sender,
         opts: {
             nfts: CollectionMint[];
         }
     ) {
-
         if (opts.nfts.length > 250) {
             throw new Error('More than 250 items');
         }
 
         const dict = Dictionary.empty(Dictionary.Keys.Uint(64), MintValue);
-            for (const nft of opts.nfts) {
-                dict.set(nft.index, nft);
-            }
+        for (const nft of opts.nfts) {
+            dict.set(nft.index, nft);
+        }
 
         await provider.internal(via, {
             value: toNano('0.05') * BigInt(dict.size),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
-                .storeUint(2, 32)
-                .storeUint(0, 64)
-                .storeDict(dict)
-            .endCell(),
+            body: beginCell().storeUint(2, 32).storeUint(0, 64).storeDict(dict).endCell(),
         });
     }
 
-
     async getAddress(provider: ContractProvider, index: bigint): Promise<Address> {
-        const result = await provider.get('get_nft_address_by_index', [
-            {type: 'int', value: index},
-        ]);
-    // console.log(result.stack.readAddress());
+        const result = await provider.get('get_nft_address_by_index', [{ type: 'int', value: index }]);
+        // console.log(result.stack.readAddress());
         return result.stack.readAddress();
+    }
+
+    async getCollectionData(provider: ContractProvider): Promise<any> {
+        const result = await provider.get('get_collection_data', []);
+        console.log(result.stack.readNumber());
+        const contentCell = result.stack.readCell();
+        console.log(contentCell);
+        console.log(loadFullContent(contentCell.beginParse()));
+        console.log(result.stack.readAddress());
+        // return result.stack.readNumber();
     }
 }
