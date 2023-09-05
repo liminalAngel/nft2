@@ -8,7 +8,7 @@ export async function run(provider: NetworkProvider) {
             {
                 ownerAddress: provider.sender().address as Address,
                 nextItemIndex: 0,
-                collectionContent: 'https://raw.githubusercontent.com/mitagmio/nft2/main/scripts/collect.json',
+                collectionContent: 'https://raw.githubusercontent.com/mitagmio/nft2/main/scripts/collect_data.json',
                 commonContent: '',
                 nftItemCode: await compile('SbtItem'),
                 royaltyParams: {
@@ -20,7 +20,9 @@ export async function run(provider: NetworkProvider) {
             await compile('NftCollection')
         )
     );
-
+    // const nftCollection = provider.open(
+    //     NftCollection.createFromAddress(Address.parse('EQCxxQjTWmvFYceOyRxs1DMTcRC1Zd8K9GT-jsf3DaOSn-WI'))
+    // );
     await nftCollection.sendDeploy(provider.sender(), toNano('0.05'));
 
     await provider.waitForDeploy(nftCollection.address);

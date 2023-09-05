@@ -145,10 +145,13 @@ export class NftCollection implements Contract {
         console.log(result.stack.readNumber());
         const contentCell = result.stack.readCell();
         console.log(contentCell);
-        let commonContentCell = beginCell();
-        commonContentCell.storeBuffer(Buffer.from('b5ee9c7201010101000300000201'));
-        console.log(decodeOffChainContent(commonContentCell.asCell()));
+        console.log(decodeOffChainContent(contentCell));
         console.log(result.stack.readAddress());
+        console.log(
+            decodeOffChainContent(
+                encodeOffChainContent('https://raw.githubusercontent.com/mitagmio/nft2/main/scripts/collect.json')
+            )
+        );
         // return result.stack.readNumber();
     }
 }
