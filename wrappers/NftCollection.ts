@@ -28,7 +28,7 @@ export type NftCollectionConfig = {
     royaltyParams: RoyaltyParams;
 };
 
-export function buildNftCollectionContentCell(commonContent: string, collectionContent: string): Cell {
+export function buildNftCollectionContentCell(collectionContent: string, commonContent: string): Cell {
     let contentCell = beginCell();
 
     let encodedCollectionContent = encodeOffChainContent(collectionContent);
