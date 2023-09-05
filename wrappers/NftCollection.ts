@@ -23,10 +23,10 @@ export function buildNftCollectionContentCell(commonContent: string, collectionC
     let encodedCollectionContent = encodeOffChainContent(collectionContent);
 
     let commonContentCell = beginCell();
-    commonContentCell.storeStringTail(commonContent);
+    commonContentCell.storeBuffer(Buffer.from(commonContent));
 
     contentCell.storeRef(encodedCollectionContent);
-    contentCell.storeRef(commonContentCell);
+    contentCell.storeRef(commonContentCell.asCell());
 
     return contentCell.endCell();
 }
