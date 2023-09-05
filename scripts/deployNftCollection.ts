@@ -8,7 +8,7 @@ export async function run(provider: NetworkProvider) {
             {
                 ownerAddress: provider.sender().address as Address,
                 nextItemIndex: 0,
-                collectionContent: 'https://raw.githubusercontent.com/mitagmio/nft2/main/scripts/collection.json',
+                collectionContent: 'https://raw.githubusercontent.com/mitagmio/nft2/main/scripts/collect.json',
                 commonContent: '',
                 nftItemCode: await compile('SbtItem'),
                 royaltyParams: {
@@ -26,4 +26,6 @@ export async function run(provider: NetworkProvider) {
     await provider.waitForDeploy(nftCollection.address);
 
     // run methods on `nftCollection`
+    //'b5ee9c7201010101000300000201';
+    // await nftCollection.getCollectionData();
 }
