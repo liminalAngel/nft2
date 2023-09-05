@@ -4,11 +4,12 @@ import { compile, NetworkProvider } from '@ton-community/blueprint';
 
 export async function run(provider: NetworkProvider) {
     const nftCollection = provider.open(
-        NftCollection.createFromConfig(
+        await NftCollection.createFromConfig(
             {
                 ownerAddress: provider.sender().address as Address,
                 nextItemIndex: 0,
-                collectionContent: 'https://raw.githubusercontent.com/mitagmio/nft2/main/scripts/collection_metadata.json',
+                collectionContent:
+                    'https://raw.githubusercontent.com/mitagmio/nft2/main/scripts/collection_madata.json',
                 commonContent: '',
                 nftItemCode: await compile('SbtItem'),
                 royaltyParams: {

@@ -10,7 +10,7 @@ import {
     SendMode,
     toNano,
 } from 'ton-core';
-import { decodeOffChainContent, encodeOffChainContent } from '../utils/content';
+import { loadFullContent, storeOffchainContent, OffchainContent } from '../utils/content';
 import { CollectionMint, MintValue } from '../utils/collectionHelpers';
 
 export type RoyaltyParams = {
@@ -28,25 +28,26 @@ export type NftCollectionConfig = {
     royaltyParams: RoyaltyParams;
 };
 
-export function buildNftCollectionContentCell(commonContent: string, collectionContent: string): Cell {
+export async function buildNftCollectionContentCell(commonContent: string, collectionContent: string): Promise<Cell> {
+    let contentData: OffchainContent = {
+        type: 'offchain',
+        uri: collectionContent,
+    };
     let contentCell = beginCell();
-
-    let encodedCollectionContent = encodeOffChainContent(collectionContent);
-
     let commonContentCell = beginCell();
     commonContentCell.storeBuffer(Buffer.from(commonContent));
 
-    contentCell.storeRef(encodedCollectionContent);
+    contentCell.store(storeOffchainContent(contentData));
     contentCell.storeRef(commonContentCell.asCell());
 
     return contentCell.endCell();
 }
 
-export function nftCollectionConfigToCell(config: NftCollectionConfig): Cell {
+export async function nftCollectionConfigToCell(config: NftCollectionConfig): Promise<Cell> {
     return beginCell()
         .storeAddress(config.ownerAddress)
         .storeUint(config.nextItemIndex, 64)
-        .storeRef(buildNftCollectionContentCell(config.collectionContent, config.commonContent))
+        .storeRef(await buildNftCollectionContentCell(config.collectionContent, config.commonContent))
         .storeRef(config.nftItemCode)
         .storeRef(
             beginCell()
@@ -64,8 +65,8 @@ export class NftCollection implements Contract {
         return new NftCollection(address);
     }
 
-    static createFromConfig(config: NftCollectionConfig, code: Cell, workchain = 0) {
-        const data = nftCollectionConfigToCell(config);
+    static async createFromConfig(config: NftCollectionConfig, code: Cell, workchain = 0) {
+        const data = await nftCollectionConfigToCell(config);
         const init = { code, data };
         return new NftCollection(contractAddress(workchain, init), init);
     }
@@ -145,13 +146,8 @@ export class NftCollection implements Contract {
         console.log(result.stack.readNumber());
         const contentCell = result.stack.readCell();
         console.log(contentCell);
-        console.log(decodeOffChainContent(contentCell));
+        console.log(loadFullContent(contentCell.beginParse()));
         console.log(result.stack.readAddress());
-        console.log(
-            decodeOffChainContent(
-                encodeOffChainContent('https://raw.githubusercontent.com/mitagmio/nft2/main/scripts/collect.json')
-            )
-        );
         // return result.stack.readNumber();
     }
 }
