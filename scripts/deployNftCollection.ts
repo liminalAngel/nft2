@@ -20,5 +20,5 @@ export async function run(provider: NetworkProvider) {
 
     await provider.waitForDeploy(nftCollection.address);
 
-    // run methods on `nftCollection`
+    // run methods on `nftCollection`/
 }
