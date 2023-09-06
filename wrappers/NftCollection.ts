@@ -99,7 +99,7 @@ export class NftCollection implements Contract {
         nftMessage.storeAddress(opts.itemAuthorityAddress);
 
         await provider.internal(via, {
-            value: toNano('0.05'),
+            value: toNano('0.05') + toNano('0.1'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
                 .storeUint(1, 32)
@@ -115,20 +115,20 @@ export class NftCollection implements Contract {
         provider: ContractProvider,
         via: Sender,
         opts: {
-            nfts: CollectionMint[];
+            sbts: CollectionMint[];
         }
     ) {
-        if (opts.nfts.length > 250) {
+        if (opts.sbts.length > 250) {
             throw new Error('More than 250 items');
         }
 
         const dict = Dictionary.empty(Dictionary.Keys.Uint(64), MintValue);
-        for (const nft of opts.nfts) {
-            dict.set(nft.index, nft);
+        for (const sbt of opts.sbts) {
+            dict.set(sbt.index, sbt);
         }
 
         await provider.internal(via, {
-            value: toNano('0.05') * BigInt(dict.size),
+            value: toNano('0.01') * BigInt(dict.size) + toNano('0.05'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell().storeUint(2, 32).storeUint(0, 64).storeDict(dict).endCell(),
         });
