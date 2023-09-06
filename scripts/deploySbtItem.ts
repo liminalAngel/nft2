@@ -15,7 +15,7 @@ export async function run(provider: NetworkProvider) {
             amount: toNano('0.1'),
             itemOwnerAddress: provider.sender().address as Address,
             itemAuthorityAddress: provider.sender().address as Address,
-            itemContent: 'https://raw.githubusercontent.com/liminalAngel/nft2/main/scripts/jsons/item.json',
+            itemContent: 'https://raw.githubusercontent.com/liminalAngel/nft2/main/scripts/item.json',
             itemIndex: 0,
         }
     )
