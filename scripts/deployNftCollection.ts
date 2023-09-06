@@ -8,7 +8,7 @@ export async function run(provider: NetworkProvider) {
             {
                 ownerAddress: provider.sender().address as Address,
                 nextItemIndex: 0,
-                collectionContent: 'https://raw.githubusercontent.com/mitagmio/nft2/main/scripts/collection_mdata.json',
+                collectionContent: 'https://raw.githubusercontent.com/liminalAngel/nft2/main/scripts/jsons/collection_mdata.json',
                 commonContent: '',
                 nftItemCode: await compile('SbtItem'),
                 royaltyParams: {

@@ -13,7 +13,7 @@ export async function run(provider: NetworkProvider, args: string[]) {
     await nftCollection.sendMint(provider.sender(), {
         itemOwnerAddress: provider.sender().address as Address,
         itemAuthorityAddress: provider.sender().address as Address,
-        itemContent: 'https://raw.githubusercontent.com/liminalAngel/nft2/main/scripts/item_data.json',
+        itemContent: 'https://raw.githubusercontent.com/liminalAngel/nft2/main/scripts/jsons/item.json',
         itemIndex: 0,
         amount: toNano('0.05'),
     });
